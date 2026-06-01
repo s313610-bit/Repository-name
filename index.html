@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>阿達仔自動烤肉店 - BBQ 大挑戰</title>
+    <style>
+        :root {
+            --bg-color: #2c3e50;
+            --grill-color: #34495e;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: #fff;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #e74c3c;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        .status-board {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 10px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .status-item span {
+            font-weight: bold;
+            color: #f1c40f;
+        }
+        /* 烤爐與烤網 */
+        .grill-container {
+            width: 90%;
+            max-width: 600px;
+            height: 350px;
+            background: radial-gradient(circle, #e67e22 10%, #d35400 50%, #333 100%);
+            border: 15px solid #7f8c8d;
+            border-radius: 20px;
+            margin: 0 auto;
+            position: relative;
+            box-shadow: inset 0 0 20px #000, 0 10px 20px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+        /* 烤網鐵絲效果 */
+        .grill-net {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: 
+                linear-gradient(rgba(255,255,255,0.15) 2px, transparent 2px),
+                linear-gradient(90deg, rgba(255,255,255,0.15) 2px, transparent 2px);
+            background-size: 30px 30px;
+            z-index: 1;
+        }
+        /* 肉片放置區 */
+        .meat-area {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+        /* 肉片樣式 */
+        .meat {
+            width: 80px;
+            height: 60px;
+            border-radius: 50% 40% 50% 35%;
+            position: absolute;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            box-shadow: 3px 5px 10px rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+            user-select: none;
+        }
+        .meat:hover {
+            transform: scale(1.05);
+        }
+        .meat:active {
+            transform: scale(0.95);
+        }
+        /* 遊戲提示/結束畫面 */
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 10;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .overlay.active {
+            display: flex;
+        }
+        .btn {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1.2rem;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+            box-shadow: 0 5px #219653;
+        }
+        .btn:hover { background-color: #2ec4b6; }
+        .btn:active {
+            box-shadow: 0 2px #219653;
+            transform: translateY(3px);
+        }
+        .instructions {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #bdc3c7;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🔥 終極 BBQ 烤肉大挑戰 🔥</h1>
+    
+    <div class="status-board">
+        <div class="status-item">關卡: <span id="level">1</span>/5</div>
+        <div class="status-item">總得分: <span id="score">0</span></div>
+        <div class="status-item">本關目標: 成功烤好 <span id="target">3</span> 片</div>
+        <div class="status-item">已完成: <span id="cooked-count">0</span> 片</div>
+    </div>
+
+    <div class="grill-container">
+        <div class="grill-net"></div>
+        <div class="meat-area" id="meat-area"></div>
+    </div>
+
+    <p class="instructions">💡 遊戲玩法：點擊烤網上的生肉開始烤。觀察顏色，在<b>「完美金黃」</b>時再次點擊收肉！太慢會烤焦喔！</p>
+
+    <div class="overlay" id="overlay">
+        <h2 id="overlay-title">準備好開始烤肉了嗎？</h2>
+        <p id="overlay-desc">第一關即將開始，請盯緊你的肉片！</p>
+        <button class="btn" id="overlay-btn" onclick="handleOverlayClick()">開始遊戲</button>
+    </div>
+
+    <script>
+        // 遊戲狀態變數
+        let currentLevel = 1;
+        let score = 0;
+        let successfulCookedInLevel = 0;
+        let activeMeatsCount = 0;
+        
+        // 關卡設定：[需要成功烤好的數量, 肉片熟成速度倍率]
+        const levelSettings = {
+            1: { target: 3, speed: 1.0 },
+            2: { target: 5, speed: 1.2 },
+            3: { target: 6, speed: 1.4 },
+            4: { target: 8, speed: 1.6 },
+            5: { target: 10, speed: 1.9 }
+        };
+
+        // 肉片熟成狀態定義 (與顏色/分數相關)
+        // 狀態: 0=生肉, 1=五分熟, 2=完美金黃, 3=烤焦
+        const MEAT_STATES = {
+            RAW: 0,
+            MEDIUM: 1,
+            PERFECT: 2,
+            BURNT: 3
+        };
+
+        const meatArea = document.getElementById('meat-area');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayDesc = document.getElementById('overlay-desc');
+        const overlayBtn = document.getElementById('overlay-btn');
+
+        // 初始化遊戲
+        function initGame() {
+            showOverlay(`第 ${currentLevel} 關`, `目標：成功烤好 ${levelSettings[currentLevel].target} 片完美的肉。不要讓它們烤焦了！`, "開始烤肉");
+        }
+
+        // 顯示覆蓋視窗
+        function showOverlay(title, desc, btnText) {
+            overlayTitle.innerText = title;
+            overlayDesc.innerText = desc;
+            overlayBtn.innerText = btnText;
+            overlay.classList.add('active');
+        }
+
+        // 點擊覆蓋視窗按鈕後的動作
+        function handleOverlayClick() {
+            overlay.classList.remove('active');
+            if (currentLevel > 5) {
+                // 重開全遊戲
+                currentLevel = 1;
+                score = 0;
+                document.getElementById('score').innerText = score;
+            }
+            startLevel();
+        }
+
+        // 開始當前關卡
+        function startLevel() {
+            successfulCookedInLevel = 0;
+            activeMeatsCount = 0;
+            meatArea.innerHTML = '';
+            updateUI();
+            
+            // 根據關卡持續補充肉片
+            maintainMeatPopulation();
+        }
+
+        // 更新介面文字
+        function updateUI() {
+            document.getElementById('level').innerText = currentLevel;
+            document.getElementById('target').innerText = levelSettings[currentLevel].target;
+            document.getElementById('cooked-count').innerText = successfulCookedInLevel;
+        }
+
+        // 確保畫面上維持一定數量的肉片
+        function maintainMeatPopulation() {
+            const maxMeatsOnGrill = Math.min(3 + currentLevel, 6); // 隨關卡增加烤網上的肉片上限
+            const needed = maxMeatsOnGrill - activeMeatsCount;
+            
+            // 如果還沒達到本關目標，且畫面上肉不夠，就生出新肉
+            if (successfulCookedInLevel < levelSettings[currentLevel].target && activeMeatsCount < maxMeatsOnGrill) {
+                for(let i=0; i < needed; i++) {
+                    // 稍微錯開每片肉產生的時間
+                    setTimeout(() => {
+                        if (successfulCookedInLevel < levelSettings[currentLevel].target) {
+                            createMeat();
+                        }
+                    }, Math.random() * 1000);
+                }
+            }
+        }
+
+        // 創造單一肉片
+        function createMeat() {
+            activeMeatsCount++;
+            const meat = document.createElement('div');
+            meat.className = 'meat';
+            
+            // 隨機在烤網內的位置
+            const posX = Math.random() * (meatArea.clientWidth - 90);
+            const posY = Math.random() * (meatArea.clientHeight - 70);
+            meat.style.left = `${posX}px`;
+            meat.style.top = `${posY}px`;
+
+            // 初始狀態：生肉
+            let state = MEAT_STATES.RAW;
+            meat.style.backgroundColor = '#ff6b6b'; // 生牛肉紅
+            meat.style.color = '#fff';
+            meat.innerText = '生肉';
+
+            // 計算熟成速度
+            const baseInterval = 1500; // 每個階段基礎毫秒數
+            const speedMultiplier = levelSettings[currentLevel].speed;
+            const tickTime = baseInterval / speedMultiplier;
+
+            // 開始熟成計時器
+            let timer = setInterval(() => {
+                state++;
+                if (state === MEAT_STATES.MEDIUM) {
+                    meat.style.backgroundColor = '#d35400'; // 橘紅/五分熟
+                    meat.innerText = '五分熟';
+                } else if (state === MEAT_STATES.PERFECT) {
+                    meat.style.backgroundColor = '#b58900'; // 金黃完美
+                    meat.style.color = '#fff';
+                    meat.innerText = '完美！';
+                    // 加上一點完美的光暈效果
+                    meat.style.boxShadow = '0 0 15px #f1c40f';
+                } else if (state === MEAT_STATES.BURNT) {
+                    meat.style.backgroundColor = '#2c3e50'; // 烤焦黑
+                    meat.style.boxShadow = 'none';
+                    meat.style.color = '#7f8c8d';
+                    meat.innerText = '烤焦了';
+                    clearInterval(timer);
+                }
+            }, tickTime);
+
+            // 點擊肉片的處理邏輯
+            meat.onclick = () => {
+                clearInterval(timer); // 拿起肉片，停止熟成
+                meat.onclick = null;  // 防止重複點擊
+
+                if (state === MEAT_STATES.RAW || state === MEAT_STATES.MEDIUM) {
+                    // 太早拿起來
+                    alert('還太生了！沒熟不能吃。');
+                    removeMeat(meat);
+                } else if (state === MEAT_STATES.PERFECT) {
+                    // 完美收網
+                    score += 100 * currentLevel;
+                    successfulCookedInLevel++;
+                    document.getElementById('score').innerText = score;
+                    updateUI();
+                    
+                    flashEffect(meat, '#27ae60');
+                    setTimeout(() => {
+                        removeMeat(meat);
+                        checkLevelProgress();
+                    }, 300);
+                } else if (state === MEAT_STATES.BURNT) {
+                    // 烤焦了才拿
+                    flashEffect(meat, '#c0392b');
+                    setTimeout(() => {
+                        removeMeat(meat);
+                        maintainMeatPopulation(); // 補位
+                    }, 300);
+                }
+            };
+
+            meatArea.appendChild(meat);
+        }
+
+        // 點擊後的視覺反饋效果
+        function flashEffect(element, color) {
+            element.style.backgroundColor = color;
+            element.style.transform = 'scale(1.2)';
+            element.style.opacity = '0';
+            element.style.transition = 'all 0.3s ease';
+        }
+
+        // 移除肉片並遞減計數
+        function removeMeat(element) {
+            if (element.parentNode) {
+                element.parentNode.removeChild(element);
+                activeMeatsCount--;
+            }
+        }
+
+        // 檢查是否達到過關條件
+        function checkLevelProgress() {
+            if (successfulCookedInLevel >= levelSettings[currentLevel].target) {
+                // 清除畫面上剩餘的肉
+                meatArea.innerHTML = '';
+                activeMeatsCount = 0;
+
+                if (currentLevel < 5) {
+                    currentLevel++;
+                    showOverlay(`🎉 恭喜過關！`, `你已成功烤好足夠的肉片。準備挑戰第 ${currentLevel} 關！`, "下一關");
+                } else {
+                    // 5關全過
+                    currentLevel++; // 變成 6 觸發重新開始邏輯
+                    showOverlay(`🏆 烤肉大師就是你！`, `太厲害了！你完成了全部 5 個關卡！\n最終得分：${score} 分`, "再玩一次");
+                }
+            } else {
+                // 如果還沒過關，繼續補滿烤網上的肉
+                maintainMeatPopulation();
+            }
+        }
+
+        // 網頁載入後啟動
+        window.onload = initGame;
+    </script>
+</body>
+</html>
